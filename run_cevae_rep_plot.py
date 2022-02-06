@@ -21,13 +21,13 @@ import random
 
 def getargs():
     parser = ArgumentParser()
-    parser.add_argument('-lr', type=float, default=0.003)
+    parser.add_argument('-lr', type=float, default=0.0015)
     parser.add_argument('-opt', choices=['adam', 'rmsprop'], default='adam')
-    parser.add_argument('-epochs', type=int, default=1)
+    parser.add_argument('-epochs', type=int, default=100)
     parser.add_argument('-atc', type=str, default='relu')
-    parser.add_argument('-nf', type=int, default=20) # num of features
+    parser.add_argument('-nf', type=int, default=20) # nuclsm of features
     parser.add_argument('-d', type=int, default=9) # dim of z
-    parser.add_argument('-bs', type=int, default=40) # batch size
+    parser.add_argument('-bs', type=int, default=50) # batch size
     
     return parser.parse_args()
 
@@ -74,6 +74,11 @@ class createDS(Dataset):
         dic['mu1'] = row[4]
         dic['x'] = torch.tensor(row[5:])
         return dic
+
+def init_weights(m):
+    if isinstance(m, nn.Linear):
+        torch.nn.init.xavier_uniform(m.weight)
+        m.bias.data.fill_(0.01)
 
 
 def get_scores(moedel, data, y_mu, y_std):
@@ -162,7 +167,7 @@ def runmodel(model, data_tr, data_val, data_te, epochs, opt, lr, save_p,  \
         ITE, ATE, PEHE = get_scores(model, data_val, y_mu, y_std)
         
         
-        if PEHE_best >= PEHE or ATE_best >= ATE or ITE_best >= ITE:
+        if PEHE_best >= PEHE and ATE_best >= ATE and ITE_best >= ITE:
             print('model saved at epoch: ' + str(epoch))
             print('Val ITE:' + str(ITE) + ', Val ATE: ' + str(ATE) + \
                   ', Val PEHE: ' + str(PEHE))
@@ -257,9 +262,12 @@ def save_plot(scores, s):
     print('PEHE std: ' + str(PEHEstd))
 
 if __name__ == "__main__":
+    # control randomness
     torch.manual_seed(3)
-    np.random.seed(3)
     random.seed(3)
+    np.random.seed(3)
+    ######
+    
     #train_ratio = 0.8
     test_ratio = 0.2
     path = './source0.csv'
@@ -267,22 +275,28 @@ if __name__ == "__main__":
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     args = getargs()
     #lrs = [0.001, 0.002, 0.004]
-    replication = 2
+    replication = 5
     #ratios = [0.2/10, 0.4/10, 0.6/10, 0.8/10, 1/10]
     ratios = [400]
-    for s in range(1):
+    for s in range(2,3):
         path = './source' + str(s) + '.csv'
         data = read_data(path)
         scores = {}
+        data_tr, data_te = train_test_split(data, test_size=test_ratio)
+        data_val, data_te = train_test_split(data_te, test_size=0.5)
+        validDS = createDS(data_val, device)
+        testDS = createDS(data_te, device)
+        validDL = DataLoader(validDS, batch_size=30)
+        testDL = DataLoader(testDS, batch_size=30)
         for i in range(replication):
         #print('replication: ' + str(i + 1))
-            data_tr, data_te = train_test_split(data, test_size=test_ratio)
-            data_val, data_te = train_test_split(data_te, test_size=0.5)
-            validDS = createDS(data_val, device)
-
-            testDS = createDS(data_te, device)
-            validDL = DataLoader(validDS, batch_size=3)
-            testDL = DataLoader(testDS, batch_size=3)
+##            data_tr, data_te = train_test_split(data, test_size=test_ratio)
+##            data_val, data_te = train_test_split(data_te, test_size=0.5)
+##            validDS = createDS(data_val, device)
+##
+##            testDS = createDS(data_te, device)
+##            validDL = DataLoader(validDS, batch_size=30)
+##            testDL = DataLoader(testDS, batch_size=30)
             scores[i] = {'ITE': [], 'ATE': [], 'PEHE': [],'size': []}
             for ratio in ratios:
                 #train_size = int(len(data_tr) * ratio)
@@ -291,6 +305,7 @@ if __name__ == "__main__":
                 trainDS = createDS(data_tr1, device)
                 trainDL = DataLoader(trainDS, batch_size = args.bs, shuffle=True)
                 model = CEVAE(args.nf, args.d, device)
+                #model.apply(init_weights)
                 ITE, ATE, PEHE = runmodel(model, trainDL, validDL, testDL, \
                                       args.epochs, args.opt, args.lr ,save_path,\
                                           y_mu, y_std)

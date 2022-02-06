@@ -11,7 +11,7 @@ import numpy as np
 import os
 
 
-def neur_network(insize, outsize, h, dh, act, zero_one = False):
+def neur_network(insize, outsize, h, dh, act, zero_one = False, nonneg=None):
     # zero_one: output in [0, 1]
     if act.lower() == 'relu':
         actv = nn.ReLU()
@@ -27,15 +27,15 @@ def neur_network(insize, outsize, h, dh, act, zero_one = False):
             net.append(nn.Softmax())
         else:
             net.append(nn.Sigmoid())
-    else:
+    elif nonneg:
         net.append(actv)
     return nn.Sequential(*net)
 
 class Network(nn.Module):
-    def __init__(self, insize, outsize, h, dh, act, dist, zero_one = False):
+    def __init__(self, insize, outsize, h, dh, act, dist, zero_one = False, nonneg=None):
         super(Network, self).__init__()
         # dist = "Bernoulli" / "Normal"
-        self.nn = neur_network(insize, outsize, h, dh, act, zero_one=zero_one)
+        self.nn = neur_network(insize, outsize, h, dh, act, zero_one=zero_one, nonneg=nonneg)
         if dist.lower() == 'bernoulli':
             self.dist = torch.distributions.Bernoulli
         elif dist.lower() == 'multinormal' or dist.lower() == 'multigaussian':
@@ -92,7 +92,6 @@ class CEVAE(nn.Module):
         self.prior_mean = prior_mean
         self.prior_std = prior_std
         self.device = device
-        self.eps = torch.tensor(1e-10).to(device)
         if len(prior_mean) != d:
             self.prior_mean = torch.zeros(d)
             self.prior_std = torch.eye(d)
@@ -101,7 +100,7 @@ class CEVAE(nn.Module):
                                                             torch.abs(self.prior_std.to(device)))
                                                             
         # p(x|z)
-        self.p_x_z = Network(d, 2 * nf, h, dh, act, 'multiNormal').to(device)
+        self.p_x_z = Network(d, 2 * nf, h, dh, act, 'multiNormal', nonneg=True).to(device)
 
         # p(t|z)
         self.p_t_z = Network(d, 1, h, dh, act, 'Bernoulli', zero_one=True).to(device)
@@ -147,14 +146,13 @@ class CEVAE(nn.Module):
                                   torch.mul(self.q_z_xyt1(h_xy).T, t).T, 2, \
                                   dim=1)
         #z_std = self.multi_diag(z_std)
-        z_std += self.eps
-        sample_z = self.q_z_xyt0.sample(z_mu, z_std)
+        sample_z = self.q_z_xyt0.sample(z_mu, torch.exp(0.5 * z_std))
         y_mu = torch.mul(self.p_y_zt0(sample_z).T, 1 - t).T +\
                                   torch.mul(self.p_y_zt1(sample_z).T, t).T
         # logp(y|z,t)
         logp_y_zt = self.p_y_zt0.log_p(y, y_mu, torch.ones(y_mu.shape).to(self.device)).flatten()
-        
-        z_std = self.multi_diag(z_std)
+
+        z_std = self.multi_diag(torch.exp(z_std))
         # logq (z|x,y,t)
         logp_z_xyt = self.q_z_xyt0.log_p(sample_z, z_mu, z_std)
 
@@ -168,7 +166,7 @@ class CEVAE(nn.Module):
         log_t_z = torch.diagonal(self.p_t_z.log_p(t.float(), pt)) 
 
         x_mu, x_std = torch.chunk(self.p_x_z(sample_z), 2, dim=1)
-        x_std = self.multi_diag(x_std + self.eps)
+        x_std = self.multi_diag(torch.exp(x_std))
         # logp(x|z)
         log_x_z = self.p_x_z.log_p(x, x_mu, x_std)
 
