@@ -110,7 +110,7 @@ def get_scores(moedel, data, stat, source):
             y_fc = batch[idx + 'y_fac'].numpy()
             y0_gt = batch[idx + 'mu0'].numpy()
             y1_gt = batch[idx + 'mu1'].numpy()
-            y0_pre, y1_pre = model.predict(x, 0) # i: select specific nn
+            y0_pre, y1_pre = model.predict(x, i) # i: select specific nn
             y0_pre = y0_pre.cpu().detach().numpy() * std + mu
             y1_pre = y1_pre.cpu().detach().numpy() * std + mu
             ITE_gt1 = y1_gt - y0_gt
@@ -171,7 +171,7 @@ def runmodel(model, data_tr, data_val, data_te, epochs, opt, lr, save_p,  \
                     y.append([float(entry)])
                 y = torch.tensor(y).to(device)
                 x = batch[idx + 'x'].to(device)
-                loss = torch.mean(model.getloss(x, y, T, 0)) # i: select specific nn
+                loss = torch.mean(model.getloss(x, y, T, i)) # i: select specific nn
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad()
