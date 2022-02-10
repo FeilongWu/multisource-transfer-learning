@@ -114,7 +114,7 @@ class CEVAE(nn.Module):
                                                             torch.abs(self.prior_std.to(device)))
                                                             
         # p(x|z)
-        self.p_x_z = Network(d, 2 * nf, h, dh, act, 'multiNormal', nonneg=True, bias=False).to(device)
+        self.p_x_z = Network(d, 2 * nf, h, dh, act, 'multiNormal').to(device)
 
         # p(t|z)
         self.p_t_z = Network(d, 1, h, dh, act, 'Bernoulli', zero_one=True).to(device)
