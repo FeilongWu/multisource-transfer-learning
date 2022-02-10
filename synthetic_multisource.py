@@ -59,6 +59,6 @@ if __name__ == '__main__':
     y_cof = np.random.rand(1, dz)
     z_mean = [0.3, 0.6, 0.9]
     for i in range(num_s):
-        z_mu = np.clip(z_mean[i] + np.random.rand(1, dz) / 100, 0 ,1)
+        z_mu = np.clip(z_mean[i] + np.random.rand(1, dz) / 20, 0 ,1)
         data = generate_data(dz, nf, n, x_cof, y_cof, z_mu)
         export_csv(data, i)
