@@ -21,13 +21,13 @@ import random
 
 def getargs():
     parser = ArgumentParser()
-    parser.add_argument('-lr', type=float, default=0.001)
+    parser.add_argument('-lr', type=float, default=0.002)
     parser.add_argument('-opt', choices=['adam', 'rmsprop'], default='adam')
-    parser.add_argument('-epochs', type=int, default=80)
+    parser.add_argument('-epochs', type=int, default=60)
     parser.add_argument('-atc', type=str, default='relu')
     parser.add_argument('-nf', type=int, default=20) # num of features
     parser.add_argument('-d', type=int, default=20) # dim of z
-    parser.add_argument('-bs', type=int, default=30) # batch size
+    parser.add_argument('-bs', type=int, default=40) # batch size
     
     return parser.parse_args()
 
@@ -102,8 +102,8 @@ def get_scores(moedel, data, stat, source):
         source_s[i] = {'ITE_pre': [], 'ITE_gt': [], 'ite_f_cf': []}
     for _, batch in enumerate(data):
         for i in range(source):
-            mu = stat[i][0]
-            std = stat[i][1]
+            #mu = stat[i][0]
+            #std = stat[i][1]
             idx = str(i)
             x = batch[idx + 'x'].to(device)
             T = batch[idx + 'T'].numpy()
@@ -111,8 +111,8 @@ def get_scores(moedel, data, stat, source):
             y0_gt = batch[idx + 'mu0'].numpy()
             y1_gt = batch[idx + 'mu1'].numpy()
             y0_pre, y1_pre = model.predict(x, i) # i: select specific nn
-            y0_pre = y0_pre.cpu().detach().numpy() * std + mu
-            y1_pre = y1_pre.cpu().detach().numpy() * std + mu
+            y0_pre = y0_pre.cpu().detach().numpy() 
+            y1_pre = y1_pre.cpu().detach().numpy() 
             ITE_gt1 = y1_gt - y0_gt
             ITE_gt.extend(ITE_gt1)
             source_s[i]['ITE_gt'].extend(ITE_gt1)
@@ -240,8 +240,8 @@ if __name__ == "__main__":
     save_path = './model1.pth'
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     args = getargs()
-    replication = 5
-    source = 3
+    replication = 2
+    source = 1
     scores = {}
     tr_size = 400
     source_s = {}
@@ -252,9 +252,9 @@ if __name__ == "__main__":
         data = read_data(path)
         data_tr, data_te = train_test_split(data, test_size=test_ratio)
         data_val, data_te = train_test_split(data_te, test_size=0.5)
-        data_tr, y_mu, y_std = normal_data(copy.deepcopy(data_tr[:tr_size]))
-        stat[i] = [y_mu, y_std]
-        trDL.append(data_tr)
+        #data_tr, y_mu, y_std = normal_data(copy.deepcopy(data_tr[:tr_size]))
+        #stat[i] = [y_mu, y_std]
+        trDL.append(data_tr[:tr_size])
         valDL.append(data_val)
         teDL.append(data_te)
     trainDS = createDS(trDL, device, mixed=True)

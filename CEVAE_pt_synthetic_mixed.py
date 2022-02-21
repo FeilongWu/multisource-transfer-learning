@@ -120,10 +120,10 @@ class CEVAE(nn.Module):
         self.p_t_z = Network(d, 1, h, dh, act, 'Bernoulli', zero_one=True).to(device)
 
        # p(y|z,t=1)
-        self.p_y_zt1 = Network(d, 1, h, dh, act, 'Normal').to(device)
+        self.p_y_zt1 = Network(d, 2, h, dh, act, 'Normal').to(device)
 
         # p(y|z,t=0)
-        self.p_y_zt0 = Network(d, 1, h, dh, act, 'Normal').to(device)
+        self.p_y_zt0 = Network(d, 2, h, dh, act, 'Normal').to(device)
 
         # q(t|x)
         self.q_t_x = Network(nf, 1, h, dh, act, 'Bernoulli', zero_one=True).to(device)
@@ -132,10 +132,10 @@ class CEVAE(nn.Module):
         self.rep_x = Network(nf, dh, 0, dh, act, 'Normal', zero_one=True).to(device)
 
          # q(y|x,t=1)
-        self.q_y_xt1 = Network(dh, 1, h-1, dh, act, 'Normal').to(device)
+        self.q_y_xt1 = Network(dh, 2, h-1, dh, act, 'Normal').to(device)
 
         # q(y|x,t=0)
-        self.q_y_xt0 = Network(dh, 1, h-1, dh, act, 'Normal').to(device)
+        self.q_y_xt0 = Network(dh, 2, h-1, dh, act, 'Normal').to(device)
 
         # shared representation of x and y
         self.rep_xy = Network(nf+1, dh, 0, dh, act, 'Normal', zero_one=True).to(device)
@@ -161,18 +161,21 @@ class CEVAE(nn.Module):
                                   dim=1)
         #z_std = self.multi_diag(z_std)
         sample_z = self.q_z_xyt0[0].sample(z_mu, torch.exp(0.5 * z_std)) # z_std = log var
-        y_mu = torch.mul(self.p_y_zt0(sample_z).T, 1 - t).T +\
-                                  torch.mul(self.p_y_zt1(sample_z).T, t).T
+        y_mu, y_std = torch.chunk(torch.mul(self.p_y_zt0(sample_z).T, 1 - t).T +\
+                                  torch.mul(self.p_y_zt1(sample_z).T, t).T, 2, dim=1)
+        
+        y_std = torch.exp(y_std)
         # logp(y|z,t)
-        logp_y_zt = self.p_y_zt0.log_p(y, y_mu, torch.ones(y_mu.shape).to(self.device)).flatten()
+        logp_y_zt = self.p_y_zt0.log_p(y, y_mu, y_std).flatten()
 
         z_std = self.multi_diag(torch.exp(z_std))
         # logq (z|x,y,t)
         logp_z_xyt = self.q_z_xyt0[0].log_p(sample_z, z_mu, z_std)
 
-        qy_mu = torch.mul(self.q_y_xt0(h_x).T, 1-t).T + torch.mul(self.q_y_xt1(h_x).T, t).T
+        qy_mu, qy_std = torch.chunk(torch.mul(self.q_y_xt0(h_x).T, 1-t).T + torch.mul(self.q_y_xt1(h_x).T, t).T, 2, dim=1)
+        qy_std = torch.exp(qy_std)
         # logq (y|x,t=0)
-        logq_y_xt = self.q_y_xt0.log_p(y, qy_mu, torch.ones(qy_mu.shape).to(self.device)).flatten()
+        logq_y_xt = self.q_y_xt0.log_p(y, qy_mu, qy_std).flatten()
         
         pt = self.p_t_z(sample_z)
         # logp(t|z)
@@ -196,16 +199,16 @@ class CEVAE(nn.Module):
     def predict(self, x, idx):
         t = torch.round(self.q_t_x(x)).T.flatten()
         rep_x = self.rep_x(x)
-        qy = (torch.mul(self.q_y_xt0(rep_x).T, 1 - t) + \
-             torch.mul(self.q_y_xt1(rep_x).T, t)).T
+        qy = (torch.mul(torch.chunk(self.q_y_xt0(rep_x), 2, dim=1)[0].T, 1 - t) + \
+             torch.mul(torch.chunk(self.q_y_xt1(rep_x), 2, dim=1)[0].T, t)).T
         rep_xy = self.rep_xy(torch.cat((x,qy), 1))
         qz, _ = torch.chunk(torch.mul(self.q_z_xyt0[idx](rep_xy).T, 1 - t).T + \
                             torch.mul(self.q_z_xyt1[idx](rep_xy).T, t).T, 2, dim=1)
-        y = (torch.mul(self.p_y_zt0(qz).T, 1 - t) + \
-            torch.mul(self.p_y_zt1(qz).T, t)).T
+        y, _ = torch.chunk((torch.mul(self.p_y_zt0(qz).T, 1 - t) + \
+            torch.mul(self.p_y_zt1(qz).T, t)).T, 2, dim=1)
         t1 = 1 - t
-        y_com = (torch.mul(self.p_y_zt0(qz).T, 1 - t1) + \
-            torch.mul(self.p_y_zt1(qz).T, t1)).T
+        y_com, _ = torch.chunk((torch.mul(self.p_y_zt0(qz).T, 1 - t1) + \
+            torch.mul(self.p_y_zt1(qz).T, t1)).T, 2, dim=1)
         y0 = (torch.mul(y.T, 1 - t) + torch.mul(y_com.T, 1 - t1)).T.flatten()
         y1 = (torch.mul(y.T, t) + torch.mul(y_com.T, t1)).T.flatten()
         return y0, y1
