@@ -13,6 +13,8 @@ def find_act(act):
         actv = nn.Sigmoid()
     elif act.lower() == 'softplus':
         actv = nn.Softplus()
+    elif act.lower() == 'elu':
+        actv = nn.ELU()
     return actv
 
 class px(nn.Module):
