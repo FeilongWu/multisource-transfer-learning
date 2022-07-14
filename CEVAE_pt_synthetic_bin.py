@@ -122,7 +122,7 @@ class qz1(nn.Module):
 
     def forward(self, rep_xy):
         rep = self.NN(rep_xy)
-        loc = self.loc(rep) 
+        loc = self.loc(rep)
         scale = self.scale(rep) + eps
         return torch.cat((loc, scale), 1)
         
@@ -211,6 +211,7 @@ class CEVAE(nn.Module):
         
 
     def getloss(self, x, y, t):
+        # x, y, t shape: [batch size, column]
         dt = t.shape[0]
         self.pz = dist.Normal(torch.zeros(dt, self.dz).to(self.device),\
                          torch.ones(dt, self.dz).to(self.device))
@@ -218,27 +219,25 @@ class CEVAE(nn.Module):
         # variational approximation
         qt_loc = self.qt(x)
         qt_dist = dist.Bernoulli(qt_loc)
-        qt_sample = qt_dist.sample()
         rep_x = self.rep_x(x)
-        qy_loc = self.qy0(rep_x) * (1-qt_sample) + \
-                 self.qy1(rep_x) * qt_sample
+        qy_loc = self.qy0(rep_x) * (1-t.unsqueeze(-1)) + \
+                 self.qy1(rep_x) * t.unsqueeze(-1)
         qy_dist = dist.Bernoulli(qy_loc)
-        qy_sample = qy_dist.sample()
 
-        rep_xy = self.rep_xy(torch.cat((x,qy_sample), 1))
-        qz_loc, qz_scale = torch.chunk(self.qz0(rep_xy) * (1-qt_sample) + \
-                                       self.qz1(rep_xy) * qt_sample, 2, dim=1)
+        rep_xy = self.rep_xy(torch.cat((x,y.float()), 1))
+        qz_loc, qz_scale = torch.chunk(self.qz0(rep_xy) * (1-t) + \
+                                       self.qz1(rep_xy) * t, 2, dim=1)
+
         qz_dist = dist.Normal(qz_loc, qz_scale)
-        qz_s = qz_dist.rsample()
+        qz_s = qz_dist.rsample().float()
 
         # reconstruct distributions
         px_loc, px_scale = self.px(qz_s)
         pt_loc = self.pt(qz_s)
         py_loc = self.y_mean(qz_s, t)
-
         #loss
         logpx = torch.sum(dist.Normal(px_loc, px_scale).log_prob(x))
-        logpt = torch.sum(dist.Bernoulli(pt_loc).log_prob(t.view(dt, 1).float()))
+        logpt = torch.sum(dist.Bernoulli(pt_loc).log_prob(t))
         logpy = torch.sum(dist.Bernoulli(py_loc).log_prob(y))
 
         logpz = self.pz.log_prob(qz_s)
@@ -255,7 +254,7 @@ class CEVAE(nn.Module):
 
     def y_mean(self, z, t):
         dt = t.shape[0]
-        return self.py0(z) * (1-t.view(dt,1)) + self.py1(z) * t.view(dt,1)
+        return self.py0(z) * (1-t) + self.py1(z) * t
 
     def lower_bound(self, x, y, t):
         dt = t.shape[0]
@@ -265,24 +264,24 @@ class CEVAE(nn.Module):
 
         qt_loc = self.qt(x)
         qt_dist = dist.Bernoulli(qt_loc)
-        qt = qt_dist.sample()
+
         rep_x = self.rep_x(x)
-        qy_loc = self.qy0(rep_x) * (1-qt.view(dt, 1)) + \
-                 self.qy1(rep_x) * qt.view(dt, 1)
+        qy_loc = self.qy0(rep_x) * (1-t.view(dt, 1)) + \
+                 self.qy1(rep_x) * t.view(dt, 1)
         qy_dist = dist.Bernoulli(qy_loc)
-        qy = qy_dist.sample()
         
-        rep_xy = self.rep_xy(torch.cat((x,qy), 1))
-        qz_loc, qz_scale = torch.chunk(self.qz0(rep_xy) * (1-qt.view(dt, 1)) + \
-                                       self.qz1(rep_xy) * qt.view(dt, 1), 2, dim=1)
+        rep_xy = self.rep_xy(torch.cat((x,y), 1))
+        qz_loc, qz_scale = torch.chunk(self.qz0(rep_xy) * (1-t.view(dt, 1)) + \
+                                       self.qz1(rep_xy) * t.view(dt, 1), 2, dim=1)
         qz_dist = dist.Normal(qz_loc, qz_scale)
-        qz_s = qz_dist.mean
+        qz_s = qz_dist.rsample()
 
 
         # reconstruct distributions
         px_loc, px_scale = self.px(qz_s)
         pt_loc = self.pt(qz_s)
         py_loc = self.y_mean(qz_s, t)
+        
         
 
         # loss
