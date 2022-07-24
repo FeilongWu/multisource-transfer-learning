@@ -24,7 +24,7 @@ def getargs():
     parser.add_argument('-lr', type=float, default=0.001)
     parser.add_argument('-opt', choices=['adam', 'rmsprop'], default='adam')
     parser.add_argument('-epochs', type=int, default=90)
-    parser.add_argument('-atc', type=str, default='softplus')
+    parser.add_argument('-atc', type=str, default='elu')
     parser.add_argument('-nf', type=int, default=5) # nuclsm of features
     parser.add_argument('-d', type=int, default=20) # dim of z
     parser.add_argument('-bs', type=int, default=100) # batch size
