@@ -358,7 +358,7 @@ class CEVAE(nn.Module):
                                 self.qz1(rep_xy) * t, \
                                 2, dim=1)
         qz_dist = dist.Normal(qz_loc, qz_scale)
-        qz_sample = qz_dist.sample()
+        qz_samples = qz_dist.sample()
         y0 = torch.mean(self.py0(qz_samples).view(sample, dt, 1), dim=0).flatten()
         y1 = torch.mean(self.py1(qz_samples).view(sample, dt, 1), dim=0).flatten()
         
